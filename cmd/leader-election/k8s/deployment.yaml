@@ -1,0 +1,101 @@
+---
+kind: Lease
+apiVersion: coordination.k8s.io/v1
+metadata:
+  name: "leader-election"
+  labels:
+    name: "leader-election"
+    owner: "mchudgins"
+    expiration: "20250101"
+
+---
+apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
+kind: Deployment
+metadata:
+  name: leader-election
+  labels:
+    owner: "mchudgins"
+    expiration: "20250101"
+    app: leader-election
+spec:
+  selector:
+    matchLabels:
+      name: leader-election
+  strategy:
+    type: Recreate
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        name: leader-election
+        app: leader-election
+        owner: mchudgins
+        expiration: "20250101"
+    spec:
+      serviceAccountName: leader-election
+      containers:
+      - name: leader-election
+        image: mchudgins/leader-election:v0.1.0
+#        command: [ "/fleetstatus", "reader", "--log-level", "info", "--topic", "fleetstatus.gz.1", "b-1.tom-cluster-1.43cxl5.c2.kafka.us-east-1.amazonaws.com", "/ansible/cp/sentinel-hosts.yaml" ]
+        terminationMessagePath: "/dev/termination-log"
+        imagePullPolicy: Always  ## IfNotPresent
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: "metadata.namespace"
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: "metadata.name"
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: "spec.nodeName"
+          - name: LEASE_NAME
+            value: "leader-election"
+
+        resources:
+          limits:
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: leader-election
+  labels:
+    app: leader-election
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lease-manager
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get"]
+  - apiGroups: ["*", "coordination.k8s.io/v1"]
+    resources: ["leases"]
+    verbs: ["*"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lease-manager
+  labels:
+    app: leader-election
+subjects:
+- kind: ServiceAccount
+  name: leader-election
+roleRef:
+  kind: Role
+  name: lease-manager
+  apiGroup: rbac.authorization.k8s.io
