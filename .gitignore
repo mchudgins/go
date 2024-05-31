@@ -1,0 +1,42 @@
+# Created by .ignore support plugin (hsz.mobi)
+### Go template
+# Binaries for programs and plugins
+cmd/leader-election/docker/leader-election
+
+.build/*
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# ignore various text editor files
+.idea
+*.iml
+..lock
+
+
+# ignore build components
+*.zip
+.build
+coverage.txt
+
+# temporarily ignore BUILD.bazel until we're ready to switch to using bazel
+BUILD.bazel
+WORKSPACE
+tools
+bazel-*
+*.bzl
+cmd/toolexec
+
+# experimental stuff
+
+# local app config
+config.yaml
