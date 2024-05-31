@@ -115,7 +115,7 @@ to quickly create a Cobra application.`,
 		if clientset == nil {
 			os.Exit(0)
 		}
-		klog.SetLogger(zapr.NewLogger(logger)) // turn off the client-go library logging
+		klog.SetLogger(zapr.NewLogger(logger)) // have the client-go library use the zap logger
 
 		wg, err := leader_election.MonitorLease(logger, clientset, namespace, leaseName, podName)
 		if err != nil {
