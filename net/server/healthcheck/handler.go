@@ -25,12 +25,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 )
 
 // handlerWithContext is a handler implementation supporting context.Context.
 type handlerWithContext struct {
-	http.ServeMux
 	checksMutex     sync.RWMutex
 	livenessChecks  map[string]CheckWithContext
 	readinessChecks map[string]CheckWithContext
@@ -47,10 +47,27 @@ func NewHandler() Handler {
 	return h
 }
 
-func HealthCheckAPI() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Printf("healthCheck: %s\n", r.URL.Path)
+func HealthCheckAPI() http.Handler {
+	h := NewHandler()
+
+	h.AddLivenessCheck("goroutine-threshold", GoroutineCountCheck(25))
+
+	return h
+}
+
+func (s *handlerWithContext) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasSuffix(r.URL.Path, "/live") {
+		s.LiveEndpoint(w, r)
+		return
 	}
+
+	if strings.HasSuffix(r.URL.Path, "/ready") {
+		s.ReadyEndpoint(w, r)
+		return
+	}
+
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = fmt.Fprintf(w, "valid health check endpoints are /healthz/live and /healthz/ready\n")
 }
 
 func (s *handlerWithContext) LiveEndpoint(w http.ResponseWriter, r *http.Request) {

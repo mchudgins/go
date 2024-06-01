@@ -35,30 +35,23 @@ import (
 )
 
 func (s *WebApp) routes() {
-	s.router.NotFoundHandler = notFoundHandler()
-	s.router.MethodNotAllowedHandler = methodNotAllowedHandler()
+	//	s.router.NotFoundHandler = notFoundHandler()
+	//	s.router.MethodNotAllowedHandler = methodNotAllowedHandler()
 
 	s.chain = s.chain.Append(s.contextLogger(), rateLimit(10, 50))
 
 	// health checks
-	health := healthcheck.NewHandler()
-	health.AddLivenessCheck("goroutine-threshold", healthcheck.GoroutineCountCheck(25))
 
 	s.router.Handle(
-		"/healthz",
+		"GET /healthz/",
 		healthcheck.HealthCheckAPI(),
-	).
-		Methods(http.MethodGet).
-		Name("health check handler")
+	)
 
 	// make prom metrics available
 	s.router.Handle(
-		"/metrics",
+		"GET /metrics",
 		promhttp.Handler(),
-	).
-		Methods(http.MethodGet).
-		Name("prometheus metrics handler")
-
+	)
 }
 
 // contextLogger adds the per-request fields we care about to each log message
