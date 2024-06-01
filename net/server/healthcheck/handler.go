@@ -41,16 +41,6 @@ func NewHandler() Handler {
 		livenessChecks:  make(map[string]CheckWithContext),
 		readinessChecks: make(map[string]CheckWithContext),
 	}
-	//h.Handle("/live", http.HandlerFunc(h.LiveEndpoint))
-	//h.Handle("/ready", http.HandlerFunc(h.ReadyEndpoint))
-
-	return h
-}
-
-func HealthCheckAPI() http.Handler {
-	h := NewHandler()
-
-	h.AddLivenessCheck("goroutine-threshold", GoroutineCountCheck(25))
 
 	return h
 }

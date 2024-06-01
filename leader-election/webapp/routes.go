@@ -25,9 +25,9 @@ package webapp
 
 import (
 	"github.com/justinas/alice"
+	leader_election "github.com/mchudgins/go/leader-election"
 	"github.com/mchudgins/go/log"
 	"github.com/mchudgins/go/net/server/correlationID"
-	"github.com/mchudgins/go/net/server/healthcheck"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -44,7 +44,7 @@ func (s *WebApp) routes() {
 
 	s.router.Handle(
 		"GET /healthz/",
-		healthcheck.HealthCheckAPI(),
+		leader_election.HealthCheckAPI(),
 	)
 
 	// make prom metrics available

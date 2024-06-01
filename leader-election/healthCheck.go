@@ -25,6 +25,8 @@ package leader_election
 
 import (
 	"context"
+	"github.com/mchudgins/go/net/server/healthcheck"
+	"net/http"
 
 	"google.golang.org/grpc"
 
@@ -36,4 +38,12 @@ func (le *LeaderElection) Check(ctx context.Context, in *healthCheck.HealthCheck
 	health := &healthCheck.HealthCheckResponse{}
 
 	return health, nil
+}
+
+func HealthCheckAPI() http.Handler {
+	h := healthcheck.NewHandler()
+
+	h.AddLivenessCheck("goroutine-threshold", healthcheck.GoroutineCountCheck(25))
+
+	return h
 }
