@@ -23,24 +23,32 @@ package cmd
 
 import (
 	"context"
-	leader_election "github.com/mchudgins/go/k8s/leader-election"
-	"github.com/mchudgins/go/log"
-	"github.com/mchudgins/go/version"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/util/homedir"
-	"k8s.io/klog/v2"
+	"github.com/mchudgins/go/net/server"
+	"github.com/mchudgins/go/net/server/grpcHelper"
+	"google.golang.org/grpc"
 	"math/rand"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/go-logr/zapr"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/homedir"
+	"k8s.io/klog/v2"
 	cruntimeconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+
+	"github.com/mchudgins/go/leader-election"
+	lew "github.com/mchudgins/go/leader-election/webapp"
+	"github.com/mchudgins/go/log"
+	"github.com/mchudgins/go/services/generic/healthCheck"
+	"github.com/mchudgins/go/version"
 )
 
 const (
@@ -53,6 +61,7 @@ var (
 	asJSON   bool
 	cfgFile  string
 	fVerbose bool
+	httpPort = 8080
 	logLevel string
 
 	// ENV options
@@ -117,27 +126,60 @@ to quickly create a Cobra application.`,
 		}
 		klog.SetLogger(zapr.NewLogger(logger)) // have the client-go library use the zap logger
 
+		// set up OS signals & waitgroups
+		sigs := make(chan os.Signal, 1) // Create channel to receive OS signals
+		stop := make(chan struct{})     // Create channel to receive stop signa
+
+		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGINT) // Register the sigs channel to receive SIGTERM
+
 		wg, err := leader_election.MonitorLease(logger, clientset, namespace, leaseName, podName)
 		if err != nil {
 			logger.Fatal("unable to monitor lease",
 				zap.Error(err))
 		}
 
-		for {
-			pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
-			if err != nil {
-				logger.Warn("unable to return list of pods",
-					zap.Error(err))
-			} else {
-				for _, v := range pods.Items {
-					logger.Info("pod", zap.String("name", v.Name))
+		go func() {
+			for {
+				pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+				if err != nil {
+					logger.Warn("unable to return list of pods",
+						zap.Error(err))
+				} else {
+					for _, v := range pods.Items {
+						logger.Info("pod", zap.String("name", v.Name))
+					}
 				}
+
+				time.Sleep(60 * time.Second)
 			}
+		}()
 
-			time.Sleep(60 * time.Second)
-		}
+		// start up the http & grpc servers
 
-		wg.Wait()
+		weblogger := logger.With(zap.String("mod", "webapp"))
+		s := lew.NewServer(weblogger)
+		options := server.OptionsFactory(
+			server.WithHTTPServer(s),
+			server.WithRPCUnaryInterceptors(grpcHelper.Recovery),
+			server.WithRPCServer(func(g *grpc.Server) error {
+				healthCheck.RegisterHealthServer(g, s)
+				return nil
+			}),
+			server.WithShutdownSignal(stop, wg),
+			server.WithHTTPListenPort(httpPort),
+			server.WithServiceName("leaderElection"),
+			server.WithLogger(weblogger),
+			server.WithGzip(),
+		)
+
+		// start the metrics, liveness, readiness server
+		server.Run(options...)
+
+		<-sigs // Wait for signals (this hangs until a signal arrives)
+		logger.Info("OS Signal received. Shutting down...")
+
+		close(stop) // Tell goroutines to stop themselves
+		wg.Wait()   // Wait for all go routines to be stopped
 	},
 }
 
