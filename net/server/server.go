@@ -35,7 +35,6 @@ import (
 
 	afex "github.com/afex/hystrix-go/hystrix"
 	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/justinas/alice"
@@ -397,9 +396,9 @@ func Run(opts ...Option) {
 			defer wg.Done()
 			defer cfg.logger.Debug("http go routine has exited")
 
-			rootMux := mux.NewRouter()
+			rootMux := http.NewServeMux()
 
-			rootMux.PathPrefix("/").Handler(cfg.Handler)
+			rootMux.Handle("/", cfg.Handler)
 
 			chain := alice.New(gsh.HTTPMetricsCollector, gsh.HTTPAccessLogger(cfg.logger))
 

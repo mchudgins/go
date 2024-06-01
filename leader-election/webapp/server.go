@@ -24,18 +24,19 @@
 package webapp
 
 import (
-	"github.com/gorilla/mux"
+	"net/http"
+
 	"github.com/justinas/alice"
+	"go.uber.org/zap"
+
 	leader_election "github.com/mchudgins/go/leader-election"
 	"github.com/mchudgins/go/services/generic/healthCheck"
-	"go.uber.org/zap"
-	"net/http"
 )
 
 type WebApp struct {
 	healthCheck.UnimplementedHealthServer
 	logger         *zap.Logger
-	router         *mux.Router
+	router         *http.ServeMux
 	chain          alice.Chain
 	LeaderElection *leader_election.LeaderElection
 }
@@ -43,7 +44,7 @@ type WebApp struct {
 func NewServer(logger *zap.Logger) *WebApp {
 	s := &WebApp{
 		logger:         logger,
-		router:         mux.NewRouter(),
+		router:         http.NewServeMux(),
 		chain:          alice.New(),
 		LeaderElection: &leader_election.LeaderElection{},
 	}
