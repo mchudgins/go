@@ -23,9 +23,6 @@ package cmd
 
 import (
 	"context"
-	"github.com/mchudgins/go/net/server"
-	"github.com/mchudgins/go/net/server/grpcHelper"
-	"google.golang.org/grpc"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -38,6 +35,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/homedir"
@@ -47,7 +47,8 @@ import (
 	"github.com/mchudgins/go/leader-election"
 	lew "github.com/mchudgins/go/leader-election/webapp"
 	"github.com/mchudgins/go/log"
-	"github.com/mchudgins/go/services/generic/healthCheck"
+	"github.com/mchudgins/go/net/server"
+	"github.com/mchudgins/go/net/server/grpcHelper"
 	"github.com/mchudgins/go/version"
 )
 
@@ -162,7 +163,9 @@ to quickly create a Cobra application.`,
 			server.WithHTTPServer(s),
 			server.WithRPCUnaryInterceptors(grpcHelper.Recovery),
 			server.WithRPCServer(func(g *grpc.Server) error {
-				healthCheck.RegisterHealthServer(g, s)
+				h := health.NewServer()
+				healthgrpc.RegisterHealthServer(g, h)
+
 				return nil
 			}),
 			server.WithShutdownSignal(stop, wg),

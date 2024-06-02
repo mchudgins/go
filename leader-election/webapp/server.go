@@ -30,11 +30,9 @@ import (
 	"go.uber.org/zap"
 
 	leader_election "github.com/mchudgins/go/leader-election"
-	"github.com/mchudgins/go/services/generic/healthCheck"
 )
 
 type WebApp struct {
-	healthCheck.UnimplementedHealthServer
 	logger         *zap.Logger
 	router         *http.ServeMux
 	chain          alice.Chain

@@ -24,21 +24,10 @@
 package leader_election
 
 import (
-	"context"
-	"github.com/mchudgins/go/net/server/healthcheck"
 	"net/http"
 
-	"google.golang.org/grpc"
-
-	"github.com/mchudgins/go/services/generic/healthCheck"
+	"github.com/mchudgins/go/net/server/healthcheck"
 )
-
-func (le *LeaderElection) Check(ctx context.Context, in *healthCheck.HealthCheckRequest, opts ...grpc.CallOption) (*healthCheck.HealthCheckResponse, error) {
-
-	health := &healthCheck.HealthCheckResponse{}
-
-	return health, nil
-}
 
 func HealthCheckAPI() http.Handler {
 	h := healthcheck.NewHandler()
