@@ -21,35 +21,18 @@
  *
  */
 
-package webapp
+package health
 
 import (
 	"net/http"
 
-	"github.com/justinas/alice"
-	"go.uber.org/zap"
+	"github.com/mchudgins/go/net/server/healthcheck"
 )
 
-type WebApp struct {
-	logger *zap.Logger
-	router *http.ServeMux
-	chain  alice.Chain
-}
+func HealthCheckAPI() http.Handler {
+	h := healthcheck.NewHandler()
 
-func NewServer(logger *zap.Logger) *WebApp {
-	s := &WebApp{
-		logger: logger,
-		router: http.NewServeMux(),
-		chain:  alice.New(),
-	}
+	h.AddLivenessCheck("goroutine-threshold", healthcheck.GoroutineCountCheck(25))
 
-	s.routes()
-
-	s.chain.Then(s)
-
-	return s
-}
-
-func (s *WebApp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.router.ServeHTTP(w, r)
+	return h
 }

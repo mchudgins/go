@@ -25,6 +25,7 @@ package leader_election
 
 import (
 	"context"
+	"github.com/mchudgins/go/helper"
 	"os"
 	"sync"
 	"time"
@@ -39,7 +40,8 @@ import (
 )
 import "k8s.io/client-go/tools/leaderelection"
 
-func MonitorLease(logger *zap.Logger, clientset *kubernetes.Clientset, namespace, leaseName, hostname string) (*sync.WaitGroup, error) {
+func MonitorLease(logger *zap.Logger, wg *sync.WaitGroup,
+	clientset *kubernetes.Clientset, namespace, leaseName, hostname string) (context.CancelFunc, error) {
 	leaderElectionConfig := leaderelection.LeaderElectionConfig{
 		Lock: &resourcelock.LeaseLock{
 			LeaseMeta: metav1.ObjectMeta{
@@ -73,22 +75,17 @@ func MonitorLease(logger *zap.Logger, clientset *kubernetes.Clientset, namespace
 			zap.Error(err))
 	}
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	//	defer cancel()
 
-	ctx = log.NewContext(ctx, logger.With(zap.String("goRoutine", "MonitorLease")))
+	rlogger := logger.With(zap.String("goRoutine", "MonitorLease"))
+	ctx = log.NewContext(ctx, rlogger)
 
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
+	helper.LaunchGoRoutine(rlogger, wg, func() {
 		leaderelection.RunOrDie(ctx, leaderElectionConfig)
-		logger.Warn("leaderelection.RunOrDie has returned!")
-	}()
+	})
 
-	return wg, nil
+	return cancel, nil
 }
 
 func onStartedLeading(ctx context.Context) {
@@ -107,12 +104,11 @@ func onStartedLeading(ctx context.Context) {
 			case <-ctx.Done():
 				logger.Info("stopped leader loop",
 					zap.String("podName", hostname))
+				return
 
-			default:
+			case <-time.After(5 * time.Second):
 				logger.Info("still the leader",
 					zap.String("podName", hostname))
-
-				time.Sleep(3 * time.Second)
 			}
 		}
 	}()

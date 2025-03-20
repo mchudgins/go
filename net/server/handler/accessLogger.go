@@ -23,6 +23,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,7 +36,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
-	eccolog "github.com/mchudgins/go/log"
+	"github.com/mchudgins/go/log"
 	"github.com/mchudgins/go/net/server/correlationID"
 	"github.com/mchudgins/go/net/server/requestTS"
 	"github.com/mchudgins/go/net/server/user"
@@ -87,7 +88,7 @@ func RPCEndpointLog(logger *zap.Logger, s string) grpc.UnaryServerInterceptor {
 		// add the corrID to the context as well
 		ctx = correlationID.NewContext(ctx, corrID)
 
-		//grpc.SendHeader(ctx, metadata.Pairs(correlationID.CORRID, corrID))
+		// grpc.SendHeader(ctx, metadata.Pairs(correlationID.CORRID, corrID))
 
 		fields := make([]zapcore.Field, 0, 24+len(mdIn))
 		if len(s) > 0 {
@@ -103,7 +104,7 @@ func RPCEndpointLog(logger *zap.Logger, s string) grpc.UnaryServerInterceptor {
 			fields = append(fields, zap.Any("requestHeaders", mdIn))
 		}
 
-		ctx = eccolog.NewContext(ctx,
+		ctx = log.NewContext(ctx,
 			logger.With(
 				zap.String("requestID", corrID),
 			))
@@ -114,8 +115,11 @@ func RPCEndpointLog(logger *zap.Logger, s string) grpc.UnaryServerInterceptor {
 			mdOut, okOut := metadata.FromOutgoingContext(ctx)
 
 			end := time.Now()
-			elapsed := float64(end.Sub(start).Nanoseconds()) / 1000.0 // microSeconds
-			fields = append(fields, zap.Float64("duration", elapsed))
+			elapsed := end.UnixMilli() - start.UnixMilli() // float64(end.Sub(start).Nanoseconds()) / 1000.0 // microSeconds
+			grpc.SetTrailer(ctx, metadata.Pairs("duration",
+				strconv.FormatInt(elapsed, 10),
+				correlationID.CORRID, corrID))
+			fields = append(fields, zap.Int64("duration", elapsed))
 			fields = append(fields, zap.String("time", start.Format("20060102030405.000000")))
 			if okOut {
 				fields = append(fields, zap.Any("responseHeaders", mdOut))
@@ -229,7 +233,7 @@ func HTTPAccessLogger(log *zap.Logger) func(http.Handler) http.Handler {
 				fields = append(fields, zap.Any("responseHeaders", responseHeaders))
 
 				end := time.Now()
-				elapsed := float64(end.Sub(start).Nanoseconds()) / 1000.0 // microSeconds
+				elapsed := float64(end.UnixMilli() - start.UnixMilli()) // microSeconds
 
 				fields = append(fields, zap.Float64("duration", elapsed))
 				fields = append(fields, zap.String("time", start.Format("20060102030405.000000")))

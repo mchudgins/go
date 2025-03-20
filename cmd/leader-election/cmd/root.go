@@ -22,39 +22,17 @@ THE SOFTWARE.
 package cmd
 
 import (
-	"context"
 	"math/rand"
 	"os"
-	"os/signal"
-	"path"
 	"path/filepath"
-	"syscall"
 	"time"
 
-	"github.com/go-logr/zapr"
+	"github.com/mchudgins/go/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/homedir"
-	"k8s.io/klog/v2"
-	cruntimeconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	"github.com/mchudgins/go/leader-election"
-	lew "github.com/mchudgins/go/leader-election/webapp"
-	"github.com/mchudgins/go/log"
-	"github.com/mchudgins/go/net/server"
-	"github.com/mchudgins/go/net/server/grpcHelper"
-	"github.com/mchudgins/go/version"
-)
-
-const (
-	lockName       = "k8s-leader-example"
-	leaseNamespace = "default"
+	leader_election "github.com/mchudgins/go/leader-election"
 )
 
 var (
@@ -64,9 +42,6 @@ var (
 	fVerbose bool
 	httpPort = 8080
 	logLevel string
-
-	// ENV options
-	leaseName = "k8s-leader-example"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -81,108 +56,19 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-		runTime := time.Now()
 		exe, err := os.Executable()
 		if err != nil {
 			panic(err)
 		}
+		_ = exe
 
-		namespace := os.Getenv("POD_NAMESPACE")
-		if len(os.Getenv("LEASE_NAME")) > 0 {
-			leaseName = os.Getenv("LEASE_NAME")
-		}
+		logger := log.GetCmdLogger( /*path.Base(exe)*/ "", logLevel, asJSON)
 
-		podName := os.Getenv("POD_NAME")
-
-		logger := log.GetCmdLogger(path.Base(exe), logLevel, asJSON)
-		logger.Info("starting up",
-			zap.String("configFilename", viper.ConfigFileUsed()),
-			zap.String("version", version.VERSION),
-			zap.String("gitCommit", version.GITCOMMIT),
-			zap.String("POD_NAMESPACE", namespace),
-			zap.String("POD_NAME", podName),
-			zap.String("NODE_NAME", os.Getenv("NODE_NAME")),
-			zap.String("defaultNamespace", metav1.NamespaceDefault))
-
+		runTime := time.Now()
 		rnd := rand.New(rand.NewSource(runTime.UnixNano()))
 		_ = rnd
 
-		// Create a Kubernetes client using the current context
-		// recover from any panic from the OrDie attempts within
-		var clientset *kubernetes.Clientset
-		clientset = func(logger *zap.Logger) *kubernetes.Clientset {
-			defer func() {
-				if r := recover(); r != nil {
-					logger.Error("unable to obtain kubernetes client set")
-					clientset = nil
-				}
-			}()
-
-			clientset = kubernetes.NewForConfigOrDie(cruntimeconfig.GetConfigOrDie())
-
-			return clientset
-		}(logger)
-		if clientset == nil {
-			os.Exit(0)
-		}
-		klog.SetLogger(zapr.NewLogger(logger)) // have the client-go library use the zap logger
-
-		// set up OS signals & waitgroups
-		sigs := make(chan os.Signal, 1) // Create channel to receive OS signals
-		stop := make(chan struct{})     // Create channel to receive stop signa
-
-		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGINT) // Register the sigs channel to receive SIGTERM
-
-		wg, err := leader_election.MonitorLease(logger, clientset, namespace, leaseName, podName)
-		if err != nil {
-			logger.Fatal("unable to monitor lease",
-				zap.Error(err))
-		}
-
-		go func() {
-			for {
-				pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
-				if err != nil {
-					logger.Warn("unable to return list of pods",
-						zap.Error(err))
-				} else {
-					for _, v := range pods.Items {
-						logger.Info("pod", zap.String("name", v.Name))
-					}
-				}
-
-				time.Sleep(60 * time.Second)
-			}
-		}()
-
-		// start up the http & grpc servers
-
-		weblogger := logger.With(zap.String("mod", "webapp"))
-		s := lew.NewServer(weblogger)
-		options := server.OptionsFactory(
-			server.WithHTTPServer(s),
-			server.WithRPCUnaryInterceptors(grpcHelper.Recovery),
-			server.WithRPCServer(func(g *grpc.Server) error {
-				h := health.NewServer()
-				healthgrpc.RegisterHealthServer(g, h)
-
-				return nil
-			}),
-			server.WithShutdownSignal(stop, wg),
-			server.WithHTTPListenPort(httpPort),
-			server.WithServiceName("leaderElection"),
-			server.WithLogger(weblogger),
-			server.WithGzip(),
-		)
-
-		// start the metrics, liveness, readiness server
-		server.Run(options...)
-
-		<-sigs // Wait for signals (this hangs until a signal arrives)
-		logger.Info("OS Signal received. Shutting down...")
-
-		close(stop) // Tell goroutines to stop themselves
-		wg.Wait()   // Wait for all go routines to be stopped
+		leader_election.Run(logger, httpPort)
 	},
 }
 

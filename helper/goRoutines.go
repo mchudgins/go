@@ -21,18 +21,42 @@
  *
  */
 
-package leader_election
+package helper
 
 import (
-	"net/http"
+	"runtime/debug"
+	"strings"
+	"sync"
 
-	"github.com/mchudgins/go/net/server/healthcheck"
+	"go.uber.org/zap"
 )
 
-func HealthCheckAPI() http.Handler {
-	h := healthcheck.NewHandler()
+func TrapPanics(logger *zap.Logger) {
+	if r := recover(); r != nil {
+		stk := debug.Stack()
+		lines := strings.Split(string(stk), "\n")
+		logger.Error("panic occurred",
+			zap.Any("recoverInfo", r),
+			zap.Strings("stack", lines),
+		)
+	}
 
-	h.AddLivenessCheck("goroutine-threshold", healthcheck.GoroutineCountCheck(25))
+}
 
-	return h
+func LaunchGoRoutine(logger *zap.Logger, wg *sync.WaitGroup, f func()) {
+
+	if wg != nil {
+		wg.Add(1)
+	}
+
+	go func() {
+		// set up the deferred functions
+		if wg != nil {
+			defer wg.Done()
+		}
+		defer TrapPanics(logger)
+
+		// now call the actual function to run on the go thread
+		f()
+	}()
 }
