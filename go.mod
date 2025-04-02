@@ -13,6 +13,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/justinas/alice v1.2.0
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/prometheus/client_golang v1.19.1
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.18.2
